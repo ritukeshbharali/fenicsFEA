@@ -1,0 +1,46 @@
+{
+    "material": {
+        "E": 210000.0,
+        "nu": 0.3,
+        "Gc": 2.7,
+        "l0": 0.015,
+        "penalty_factor": 7500
+    },
+    "constraints": {
+        "fix_edge": [
+            "near(x[1],0.0) && on_boundary",
+            "near(x[1],0.0) && on_boundary"
+        ],
+        "fix_dofs": [
+            "dx",
+            "dy"
+        ],
+        "pres_edge": [
+            "near(x[1],1.0) && on_boundary"
+        ],
+        "pres_dofs": [
+            "dy"
+        ]
+    },
+    "stepping": {
+        "dt": 0.0005,
+        "dt2": 5e-06,
+        "t_switch": 0.0055,
+        "t_fact": 100,
+        "t_stop_ratio": 0.05,
+        "t_max_steps": 1200
+    },
+    "nl_solver": {
+        "snes": true,
+        "nl_tol": 0.001,
+        "max_iter": 1200
+    },
+    "lin_solver": {
+        "type": "PETSc"
+    },
+    "post_process": {
+        "lodi": true,
+        "lodi_edge": "near(x[1],1.0) && on_boundary",
+        "lodi_ldof": "dy"
+    }
+}
