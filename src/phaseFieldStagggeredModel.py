@@ -10,7 +10,8 @@
  * Features: 
  *           Energy split             - Amor (doi:10.1016/j.jmps.2009.04.011)
  *           Fracture irreversibility - Penalization (doi:10.1016/j.cma.2019.05.038)
- *           Solver                   - Alternative minization (staggered)
+ *                                    - PETSc TAO bound constrained optimization
+ *           Solution strategy        - Alternative minization (staggered)
  * 
  * Author:   Ritukesh Bharali, ritukesh.bharali@chalmers.se
  *           Chalmers University of Technology
@@ -18,6 +19,7 @@
  * Date:     Mon 21 Feb 19:38:00 CET 2022
  *
  * Updates (what, who, when):
+ *    - Added PETSc TAO solver, RB, 24.02.2022, 11:47
  *
  *
 """
@@ -40,6 +42,7 @@ import sys
 import time
 import json
 import sympy
+import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -80,10 +83,10 @@ nargs = len(sys.argv)
 
 if nargs != 2:
     if rank == 0:
-        print("Running the default model: SENT!")
-    problem = "SENT"
+        print("Running the default model: sent!")
+    inputCase = "sent"
 else:
-    problem = sys.argv[1]  
+    inputCase = sys.argv[1] 
 
 
 
@@ -92,14 +95,14 @@ else:
 # ---------------------------------------------------------------#
 
 # Full path + part of file name
-file_prefix  = "../input_data/"+problem+"/"+problem  
+file_prefix  = "../input_data/"+inputCase+"/"
 
 # Load mesh (parallel)
-mesh         = Mesh(comm,file_prefix+"_mesh.xml.gz")
+mesh         = Mesh(comm,file_prefix+"mesh.xml.gz")
 ndim         = mesh.topology().dim()
 
 # Load model input file
-problem_data = json.load(open(file_prefix+"_input.json","r"))
+problem_data = json.load(open(file_prefix+"params.json","r"))
 
 # Material parameters
 E            = problem_data.get("material").get("E")
@@ -112,9 +115,6 @@ pen_fact     = problem_data.get("material").get("penalty_factor")
 mu    = E / (2.0 * (1.0 + nu))
 lmbda = E * nu / ((1.0 + nu)*(1.0 - 2.0 * nu))
 K     = lmbda+2/3*mu
-
-print(E,nu,lmbda,mu,K)
-
 
 # Constraints
 fix_edge     = problem_data.get("constraints").get("fix_edge")
@@ -130,7 +130,7 @@ t_fact       = problem_data.get("stepping").get("t_fact")
 t_stop_ratio = problem_data.get("stepping").get("t_stop_ratio")
 
 # Nonlinear solver
-snes         = problem_data.get("nl_solver").get("snes")
+nl_type      = problem_data.get("nl_solver").get("nl_type")
 nl_tol       = problem_data.get("nl_solver").get("nl_tol")
 max_iter     = problem_data.get("nl_solver").get("max_iter")
 
@@ -221,6 +221,7 @@ count   = 0
 edge    = [None] * (len(fix_dofs) + len(pres_dofs))
 bcs_u   = [None] * (len(fix_dofs) + len(pres_dofs))
 
+# Dirichlet constraints (homogeneous)
 for i in range(len(fix_dofs)):
     edge[count]  = CompiledSubDomain(fix_edge[i], tol=1e-4)
     dof          = fix_dofs[i]
@@ -234,19 +235,19 @@ for i in range(len(fix_dofs)):
         raise Exception("Choose dx, dy, dz for displacement dofs!!") 
     count += 1    
 
-# Prescribed boundaries
-for idx in pres_edge:
-    for dof in pres_dofs:
-        edge[count]  = CompiledSubDomain(idx, tol=1e-4)
-        if dof == "dx":
-            bcs_u[count] = DirichletBC(V_u.sub(0), u_pres, edge[count])
-        elif dof == "dy":
-            bcs_u[count] = DirichletBC(V_u.sub(1), u_pres, edge[count])
-        elif dof == "dz":
-            bcs_u[count] = DirichletBC(V_u.sub(2), u_pres, edge[count])    
-        else:
-            raise Exception("Choose dx, dy, dz for displacement dofs!!") 
-        count += 1    
+# Dirichlet constraints (inhomogeneous)
+for i in range(len(pres_dofs)):
+    edge[count]  = CompiledSubDomain(pres_edge[i], tol=1e-4)
+    dof          = pres_dofs[i]
+    if dof == "dx":
+        bcs_u[count] = DirichletBC(V_u.sub(0), u_pres, edge[count])
+    elif dof == "dy":
+        bcs_u[count] = DirichletBC(V_u.sub(1), u_pres, edge[count])
+    elif dof == "dz":
+        bcs_u[count] = DirichletBC(V_u.sub(2), u_pres, edge[count])    
+    else:
+        raise Exception("Choose dx, dy, dz for displacement dofs!!") 
+    count += 1  
 
 # Post-processing boundaries
 lodi_ds = CompiledSubDomain(lodi_edge, tol=1e-4)
@@ -279,11 +280,15 @@ elastic_energy    = 0.5 * ufl.inner(sigma(u,d), eps(u)) * dx
 dissipated_energy = Gc / float(c_w) * (w(d) / l0 + 
                     l0 * ufl.dot(ufl.grad(d), ufl.grad(d))) * dx
 
-# Penalty energy for fracture irreversibility
-penalty_term      = 0.5 * pen(d,d0) * dx
+# Penalty term (not required for PETSc TAO solvers)
+if nl_type == "tao":
+    total_energy = elastic_energy + dissipated_energy
+else:
+    # Penalty energy for fracture irreversibility
+    penalty_term      = 0.5 * pen(d,d0) * dx
 
-# Total energy
-total_energy      = elastic_energy + dissipated_energy + penalty_term
+    # Total energy
+    total_energy      = elastic_energy + dissipated_energy + penalty_term
 
 # Extract the displacement sub-problem (Residual and Jacobian)
 F_u               = ufl.derivative(total_energy,u,u_)
@@ -306,7 +311,7 @@ solver_u          = NonlinearVariationalSolver(problem_u)
 solver_d          = NonlinearVariationalSolver(problem_d)
 
 # Solver configuration
-if snes:
+if nl_type == "snes":
 
     # PETSc SNES
     solver_u.parameters['nonlinear_solver']                       = 'snes'
@@ -322,6 +327,46 @@ if snes:
     solver_d.parameters["snes_solver"]["maximum_iterations"]      = 1
     solver_d.parameters["snes_solver"]["report"]                  = False
     solver_d.parameters["snes_solver"]["error_on_nonconvergence"] = False
+
+elif nl_type == "tao":
+
+    # Upper bound on phase-field
+    d_ub      = Function(V_d)
+    d_ub.interpolate(Constant(1.0))
+
+    # Define Fracture problem derived from the OptimisationProblem class
+    class FractureProblem(OptimisationProblem):
+
+        def __init__(self):
+            OptimisationProblem.__init__(self)
+
+        # Objective function
+        def f(self, x):
+            return assemble(total_energy)
+
+        # Gradient of the objective function
+        def F(self, b, x):
+            assemble(F_d, tensor=b)
+
+        # Hessian of the objective function
+        def J(self, A, x):
+            assemble(J_d, tensor=A)
+
+    # Newton Raphson
+    solver_u.parameters['newton_solver']['convergence_criterion']   = 'incremental'
+    solver_u.parameters["newton_solver"]["linear_solver"]           = "gmres"
+    solver_u.parameters["newton_solver"]["preconditioner"]          = "petsc_amg"
+    solver_u.parameters["newton_solver"]["maximum_iterations"]      = 1
+    solver_u.parameters["newton_solver"]["error_on_nonconvergence"] = False
+
+    # PETSc TAO
+    solver_d = PETScTAOSolver()
+    solver_d.parameters["method"] = "gpcg"
+    solver_d.parameters["line_search"] = "gpcg"
+    solver_d.parameters["linear_solver"] = "gmres"
+    solver_d.parameters["preconditioner"] = "hypre_amg"
+    solver_d.parameters["maximum_iterations"] = 1
+    solver_d.parameters["error_on_nonconvergence"] = False
 
 else:
 
@@ -344,8 +389,12 @@ else:
 # Setting up post-processing options
 # ---------------------------------------------------------------#
 
-out_dir  = "../output/"+problem
-os.makedirs(out_dir, exist_ok=True)
+# Delete existing output folder and create a new one
+out_dir  = "../output/"+inputCase
+if os.path.exists(out_dir) and os.path.isdir(out_dir):
+    shutil.rmtree(out_dir)
+    print("Deleted existing folder!")
+os.makedirs(out_dir, exist_ok=False)
 
 # Load-displacement data on root process
 if rank == 0:
@@ -398,7 +447,11 @@ while True:
         iter += 1
         dOld.assign(d)
         solver_u.solve()
-        solver_d.solve()
+
+        if nl_type == "tao":
+            solver_d.solve(FractureProblem(),d.vector(),dOld.vector(),d_ub.vector())
+        else:
+            solver_d.solve()
 
         local_err = errornorm(d,dOld,norm_type='l2',mesh = mesh)
         err       = MPI.COMM_WORLD.allreduce(local_err, op=MPI.SUM)/size
@@ -445,7 +498,7 @@ if rank == 0:
 
 
 # Show the final phase-field only if run on single process
-if size == 0:
+if size == 1:
     p=plot(d)
     p.set_cmap("viridis")
     p.set_clim(0.0,1.0)
