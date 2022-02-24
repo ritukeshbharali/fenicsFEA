@@ -6,11 +6,11 @@ mechanics problems.
 #### FE Models
  - Phase-field fracture 
 
-### Requirements
+#### Requirements
  - Fenics 2019 and its dependencies 
  - Paraview or VisIt for visualization
  
-### Run a demo
+#### Run a demo
  - Enter './src'
  - On terminal: python3 "script_name" "model_to_run"
  - Output stored in './output/model_to_run'
