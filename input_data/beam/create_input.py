@@ -35,7 +35,8 @@ nu         = 0.3
 hmax       = 0.1
 
 # Constraints
-fix_edge   = ["near(x[0],0.0) && on_boundary"]
+fix_edge   = ["near(x[0],0.0) && on_boundary",
+              "near(x[0],0.0) && on_boundary"]
 fix_dofs   = ["dx","dy"]
 pres_edge  = ["near(x[0],25.0) && on_boundary"]
 pres_dofs  = ["dy"]
@@ -104,7 +105,6 @@ Data = {
     },
 
     "nl_solver": {
-        "nl_type": nl_type,
         "nl_tol": nl_tol,
         "max_iter": max_iter
     },
