@@ -1,0 +1,38 @@
+{
+    "material": {
+        "E": 100000.0,
+        "nu": 0.3
+    },
+    "constraints": {
+        "fix_edge": [
+            "near(x[0],0.0) && on_boundary"
+        ],
+        "fix_dofs": [
+            "dx",
+            "dy"
+        ],
+        "pres_edge": [
+            "near(x[0],25.0) && on_boundary"
+        ],
+        "pres_dofs": [
+            "dy"
+        ]
+    },
+    "stepping": {
+        "dt": -0.01,
+        "t_max_steps": 10
+    },
+    "nl_solver": {
+        "nl_type": "snes",
+        "nl_tol": 0.001,
+        "max_iter": 1200
+    },
+    "lin_solver": {
+        "type": "PETSc"
+    },
+    "post_process": {
+        "lodi": true,
+        "lodi_edge": "near(x[0],0.0) && on_boundary",
+        "lodi_ldof": "dy"
+    }
+}

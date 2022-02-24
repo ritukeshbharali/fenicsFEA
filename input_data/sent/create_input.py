@@ -48,7 +48,7 @@ t_stop_ratio = 0.05
 t_max_steps  = 1200
 
 # Nonlinear solver
-snes       = True
+nl_type    = "tao"
 nl_tol     = 1e-3
 max_iter   = 1200
 
@@ -118,9 +118,9 @@ print("Mesh is refined "+str(i)+" times! \n")
 nargs = len(sys.argv)
 
 if nargs != 2:
-    File("SENT_mesh.xml.gz") << mesh
+    File("mesh.xml.gz") << mesh
 else:
-    File("SENT_mesh."+sys.argv[1]) << mesh
+    File("mesh."+sys.argv[1]) << mesh
 
 
 
@@ -128,7 +128,7 @@ else:
 # Save input data to json file
 # ---------------------------------------------------------------#
 
-SENT = {
+Data = {
 
     "material": {
         "E": E,
@@ -155,7 +155,7 @@ SENT = {
     },
 
     "nl_solver": {
-        "snes": snes,
+        "nl_type": nl_type,
         "nl_tol": nl_tol,
         "max_iter": max_iter
     },
@@ -171,9 +171,9 @@ SENT = {
     }
     
 }
-json.dump(SENT,open("./SENT_input.json","w"), indent=4, sort_keys=False)
+json.dump(Data,open("./params.json","w"), indent=4, sort_keys=False)
 
-print("SENT input files succesfully prepared! \n")
+print("Input files succesfully prepared! \n")
 
 
 # ---------------------------------------------------------------#

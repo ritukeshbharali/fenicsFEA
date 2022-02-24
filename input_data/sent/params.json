@@ -31,7 +31,7 @@
         "t_max_steps": 1200
     },
     "nl_solver": {
-        "snes": true,
+        "nl_type": "tao",
         "nl_tol": 0.001,
         "max_iter": 1200
     },

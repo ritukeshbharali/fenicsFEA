@@ -1,0 +1,41 @@
+{
+    "elem_type": "Linear",
+    "material": {
+        "E": 100000000.0,
+        "nu": 0.35,
+        "K": 1e-16,
+        "Kf": 2000000000.0,
+        "Ks": 10000000000.0,
+        "phi": 0.375,
+        "alpha": 1.0
+    },
+    "constraints": {
+        "fix_edge": [
+            "near(x[0], 0.0) || near(x[0], 1.0)",
+            "near(x[1], 0.0)",
+            "near(x[1], 10.0)"
+        ],
+        "fix_dofs": [
+            "dx",
+            "dy",
+            "dp"
+        ],
+        "neumann_edge": [
+            "near(x[1],10.0) && on_boundary"
+        ],
+        "neumann_load": -10000.0,
+        "neumann_dof": "dy"
+    },
+    "stepping": {
+        "dt": 432.0,
+        "t_max_steps": 2
+    },
+    "nl_solver": {
+        "snes": true,
+        "nl_tol": 0.001,
+        "max_iter": 1200
+    },
+    "lin_solver": {
+        "type": "PETSc"
+    }
+}
