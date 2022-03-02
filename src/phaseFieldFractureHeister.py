@@ -51,7 +51,7 @@ import matplotlib.pyplot as plt
 # Setup fenics parameters
 # ---------------------------------------------------------------#
 
-#set_log_level(40)  #ERROR=40, WARNING=30
+set_log_level(40)  #ERROR=40, WARNING=30
 parameters["form_compiler"]["optimize"]     = True
 parameters["form_compiler"]["cpp_optimize"] = True
 parameters["form_compiler"]["representation"] = "uflacs"
@@ -70,7 +70,7 @@ size = comm.Get_size()
 parameters["std_out_all_processes"]  = False;           # Terminal output on only rank 0 
 parameters["mesh_partitioner"]       = "SCOTCH"         # options: ParMETIS, SCOTCH
 parameters["linear_algebra_backend"] = "PETSc"          # options: uBLAS, Tpetra, PETSc
-parameters["ghost_mode"]             = "shared_facet"     # options: none, shared_vertex, shared_facet
+parameters["ghost_mode"]             = "shared_facet"   # options: none, shared_vertex, shared_facet
 
 
 
@@ -325,12 +325,12 @@ if nl_type == "snes":
     solver.parameters['nonlinear_solver']                       = 'snes'
     solver.parameters["snes_solver"]["linear_solver"]           = "gmres"
     solver.parameters["snes_solver"]["preconditioner"]          = "petsc_amg"
-    solver.parameters['snes_solver']['line_search']             = 'bt' 
-    solver.parameters["snes_solver"]["maximum_iterations"]      = 30
+    solver.parameters['snes_solver']['line_search']             = 'basic' 
+    solver.parameters["snes_solver"]["maximum_iterations"]      = max_iter
     solver.parameters["snes_solver"]["report"]                  = True
     solver.parameters["snes_solver"]["error_on_nonconvergence"] = True
-    solver.parameters["snes_solver"]["relative_tolerance"]      = 1e-6
-    solver.parameters["snes_solver"]["absolute_tolerance"]      = 1e-4
+    solver.parameters["snes_solver"]["relative_tolerance"]      = nl_tol
+    solver.parameters["snes_solver"]["absolute_tolerance"]      = nl_tol
 
 else:
 
@@ -338,10 +338,10 @@ else:
     solver.parameters['newton_solver']['convergence_criterion']   = 'incremental'
     solver.parameters["newton_solver"]["linear_solver"]           = "gmres"
     solver.parameters["newton_solver"]["preconditioner"]          = "petsc_amg"
-    solver.parameters["newton_solver"]["maximum_iterations"]      = 30
+    solver.parameters["newton_solver"]["maximum_iterations"]      = max_iter
     solver.parameters["newton_solver"]["error_on_nonconvergence"] = True
-    solver.parameters["newton_solver"]["relative_tolerance"]      = 1e-6
-    solver.parameters["newton_solver"]["absolute_tolerance"]      = 1e-4
+    solver.parameters["newton_solver"]["relative_tolerance"]      = nl_tol
+    solver.parameters["newton_solver"]["absolute_tolerance"]      = nl_tol
 
 
 
@@ -351,10 +351,11 @@ else:
 
 # Delete existing output folder and create a new one
 out_dir  = "../output/"+inputCase
-if os.path.exists(out_dir) and os.path.isdir(out_dir):
-    shutil.rmtree(out_dir)
-    print("Deleted existing folder!")
-os.makedirs(out_dir, exist_ok=False)
+if rank == 0:
+    if os.path.exists(out_dir) and os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+        print("Deleted existing folder!")
+        os.makedirs(out_dir, exist_ok=False)
 
 # Load-displacement data on root process
 if rank == 0:

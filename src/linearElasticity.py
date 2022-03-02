@@ -38,6 +38,7 @@ import sys
 import time
 import json
 import sympy
+import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -258,10 +259,11 @@ solver_u.parameters["newton_solver"]["error_on_nonconvergence"] = True
 
 # Delete existing output folder and create a new one
 out_dir  = "../output/"+inputCase
-if os.path.exists(out_dir) and os.path.isdir(out_dir):
-    shutil.rmtree(out_dir)
-    print("Deleted existing folder!")
-os.makedirs(out_dir, exist_ok=False)
+if rank == 0:
+    if os.path.exists(out_dir) and os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+        print("Deleted existing folder!")
+        os.makedirs(out_dir, exist_ok=False)
 
 # Load-displacement data on root process
 if rank == 0:

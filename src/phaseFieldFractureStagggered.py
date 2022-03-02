@@ -4,8 +4,8 @@
  *
  * FEModel: Phase-field fracture
  * 
- * Usage: python3 pfmAmorPenalty.py <model_to_run>
- *        mpirun -np <no_of_procs> python3 pfmAmorPenalty.py <model_to_run>
+ * Usage: python3 haseFieldFractureStaggered.py <model_to_run>
+ *        mpirun -np <no_of_procs> python3 haseFieldFractureStaggered.py <model_to_run>
  *
  * Features: 
  *           Energy split             - Amor (doi:10.1016/j.jmps.2009.04.011)
@@ -71,7 +71,7 @@ size = comm.Get_size()
 parameters["std_out_all_processes"]  = False;           # Terminal output on only rank 0 
 parameters["mesh_partitioner"]       = "SCOTCH"         # options: ParMETIS, SCOTCH
 parameters["linear_algebra_backend"] = "PETSc"          # options: uBLAS, Tpetra, PETSc
-parameters["ghost_mode"]             = "shared_facet"     # options: none, shared_vertex, shared_facet
+parameters["ghost_mode"]             = "shared_facet"   # options: none, shared_vertex, shared_facet
 
 
 
@@ -391,10 +391,11 @@ else:
 
 # Delete existing output folder and create a new one
 out_dir  = "../output/"+inputCase
-if os.path.exists(out_dir) and os.path.isdir(out_dir):
-    shutil.rmtree(out_dir)
-    print("Deleted existing folder!")
-os.makedirs(out_dir, exist_ok=False)
+if rank == 0:
+    if os.path.exists(out_dir) and os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+        print("Deleted existing folder!")
+        os.makedirs(out_dir, exist_ok=False)
 
 # Load-displacement data on root process
 if rank == 0:

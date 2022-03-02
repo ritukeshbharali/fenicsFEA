@@ -4,8 +4,8 @@
  *
  * FEModel: Fully saturated porous media with solid and fluid phases
  * 
- * Usage: python3 poroElasticSat2P.py <model_to_run>
- *        mpirun -np <no_of_procs> python3 poroElasticSat2P.py <model_to_run>
+ * Usage: python3 saturatedPoroelasticity2P.py <model_to_run>
+ *        mpirun -np <no_of_procs> python3 saturatedPoroelasticity2P.py <model_to_run>
  *
  * Features: 
  *           Solver                   - Coupled, PETSc LU 
@@ -277,8 +277,7 @@ solver  = NonlinearVariationalSolver(problem)
 
 # Solver configuration
 solver.parameters['newton_solver']['convergence_criterion']   = 'incremental'
-solver.parameters["newton_solver"]["linear_solver"]           = "gmres"
-solver.parameters["newton_solver"]["preconditioner"]          = "amg"
+solver.parameters["newton_solver"]["linear_solver"]           = "petsc"
 solver.parameters["newton_solver"]["maximum_iterations"]      = 20
 solver.parameters["newton_solver"]["error_on_nonconvergence"] = True
 solver.parameters["newton_solver"]["relative_tolerance"]      = 1e-4
@@ -289,11 +288,13 @@ solver.parameters["newton_solver"]["relative_tolerance"]      = 1e-4
 # Setting up post-processing options
 # ---------------------------------------------------------------#
 
+# Delete existing output folder and create a new one
 out_dir  = "../output/"+inputCase
-if os.path.exists(out_dir) and os.path.isdir(out_dir):
-    shutil.rmtree(out_dir)
-    print("Deleted existing folder!")
-os.makedirs(out_dir, exist_ok=False)
+if rank == 0:
+    if os.path.exists(out_dir) and os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+        print("Deleted existing folder!")
+        os.makedirs(out_dir, exist_ok=False)
 
 # VTK output
 vtk_out = File(out_dir+"/output.pvd")
