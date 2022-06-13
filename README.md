@@ -4,9 +4,8 @@ fenicsFEA is a package consisting of legacy fenics python script for various com
 mechanics problems. 
 
 #### FE Models
- - Linear elasticity (Isotropic)
- - Phase-field fracture (monolithic and staggered)
- - Fully saturated poroelasticity, two phase
+ - Linear elasticity 
+ - Phase-field fracture
 
 #### Requirements
  - Fenics 2019 and its dependencies 

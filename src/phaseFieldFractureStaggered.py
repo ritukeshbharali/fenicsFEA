@@ -4,7 +4,7 @@
  *
  * FEModel: Phase-field fracture
  * 
- * Usage: python3 haseFieldFractureStaggered.py <model_to_run>
+ * Usage: python3 PhaseFieldFractureStaggered.py <model_to_run>
  *        mpirun -np <no_of_procs> python3 haseFieldFractureStaggered.py <model_to_run>
  *
  * Features: 
@@ -16,17 +16,17 @@
  * Author:   Ritukesh Bharali, ritukesh.bharali@chalmers.se
  *           Chalmers University of Technology
  *
- * Date:     Mon 21 Feb 19:38:00 CET 2022
+ * Date:     21 Feb 2022
  *
- * Updates (what, who, when):
- *    - Added PETSc TAO solver, RB, 24.02.2022, 11:47
+ * Updates (when, what, who):
+ *    - 24 Feb 2022, Added PETSc TAO solver, (RB)
  *
  *
 """
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Import standard libraries and utility classes
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 # (legacy) fenics
 from dolfin import *
@@ -46,11 +46,12 @@ import shutil
 import numpy as np
 import matplotlib.pyplot as plt
 
+from pathlib import Path
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Setup fenics parameters
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 set_log_level(40)  #ERROR=40, WARNING=30
 parameters["form_compiler"]["optimize"]     = True
@@ -60,9 +61,9 @@ parameters["form_compiler"]["cpp_optimize_flags"] = "-O3 -ffast-math -march=nati
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Setup MPI
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -75,9 +76,9 @@ parameters["ghost_mode"]             = "shared_facet"   # options: none, shared_
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Model to run
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 nargs = len(sys.argv)
 
@@ -90,9 +91,9 @@ else:
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Load problem input data
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 # Full path + part of file name
 file_prefix  = "../input_data/"+inputCase+"/"
@@ -112,9 +113,9 @@ l0           = problem_data.get("material").get("l0")
 pen_fact     = problem_data.get("material").get("penalty_factor")
 
 # Derived quantities
-mu    = E / (2.0 * (1.0 + nu))
-lmbda = E * nu / ((1.0 + nu)*(1.0 - 2.0 * nu))
-K     = lmbda+2/3*mu
+mu           = E / (2.0 * (1.0 + nu))
+lmbda        = E * nu / ((1.0 + nu)*(1.0 - 2.0 * nu))
+K            = lmbda+2/3*mu
 
 # Constraints
 fix_edge     = problem_data.get("constraints").get("fix_edge")
@@ -141,9 +142,31 @@ lodi_ldof    = problem_data.get("post_process").get("lodi_ldof")
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
+# Setting up post-processing options
+# --------------------------------------------------------------------------------------#
+
+# Delete existing output folder and create a new one
+out_dir  = "../output/"+inputCase
+if rank == 0:
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+
+# Load-displacement data on root process
+if rank == 0:
+    lodi_out = open(out_dir+"/lodi.txt", 'w')
+
+# XDMF output
+xdmf_out = XDMFFile (mesh.mpi_comm(), out_dir+"/output.xdmf")
+
+# VTK mesh partition
+File(out_dir+"/meshPartition.pvd").write(
+        MeshFunction("size_t", mesh, mesh.topology().dim(), 
+            mesh.mpi_comm().rank))
+
+
+# --------------------------------------------------------------------------------------#
 # Some utility functions
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 
 def w(d):
@@ -160,7 +183,8 @@ def eps(u):
 
 def sigma_p(u):
     """Positive stress tensor based on Amor split as a function of the displacement"""
-    return 2.0 * mu * ufl.dev(eps(u)) + K * (0.5*(ufl.tr(eps(u))+abs(ufl.tr(eps(u))))) * ufl.Identity(ndim)
+    return 2.0 * mu * ufl.dev(eps(u)) + K * (0.5*(ufl.tr(eps(u))+abs(ufl.tr(eps(u))))) * \
+    ufl.Identity(ndim)
 
 def sigma_n(u):
     """Negative stress tensor based on Amor split as a function of the displacement"""
@@ -180,9 +204,9 @@ c_w   = 4*sympy.integrate(sympy.sqrt(w(z)),(z,0,1))
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Setting up function spaces and functions
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 # Reference element
 element_u = ufl.VectorElement("Lagrange",mesh.ufl_cell(),degree=1,dim=ndim)
@@ -212,9 +236,9 @@ d0        = Function(V_d)
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Setting up boundary conditions
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 u_pres  = Expression("t", t = 0.0, degree=1)
 count   = 0
@@ -269,9 +293,9 @@ n          = FacetNormal(mesh)
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Setting up the variational problem
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 # Elastic energy
 elastic_energy    = 0.5 * ufl.inner(sigma(u,d), eps(u)) * dx 
@@ -302,9 +326,9 @@ problem_d         = NonlinearVariationalProblem(F_d,d,[],J_d)
 
 
 
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Setting up solvers
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 # Displacement and phase-field solvers
 solver_u          = NonlinearVariationalSolver(problem_u)
@@ -360,13 +384,13 @@ elif nl_type == "tao":
     solver_u.parameters["newton_solver"]["error_on_nonconvergence"] = False
 
     # PETSc TAO
-    solver_d = PETScTAOSolver()
-    solver_d.parameters["method"] = "gpcg"
-    solver_d.parameters["line_search"] = "gpcg"
-    solver_d.parameters["linear_solver"] = "gmres"
-    solver_d.parameters["preconditioner"] = "hypre_amg"
-    solver_d.parameters["maximum_iterations"] = 1
-    solver_d.parameters["error_on_nonconvergence"] = False
+    solver_d                                        = PETScTAOSolver()
+    solver_d.parameters["method"]                   = "gpcg"
+    solver_d.parameters["line_search"]              = "gpcg"
+    solver_d.parameters["linear_solver"]            = "gmres"
+    solver_d.parameters["preconditioner"]           = "hypre_amg"
+    solver_d.parameters["maximum_iterations"]       = 1
+    solver_d.parameters["error_on_nonconvergence"]  = False
 
 else:
 
@@ -385,34 +409,9 @@ else:
 
 
 
-# ---------------------------------------------------------------#
-# Setting up post-processing options
-# ---------------------------------------------------------------#
-
-# Delete existing output folder and create a new one
-out_dir  = "../output/"+inputCase
-if rank == 0:
-    if os.path.exists(out_dir) and os.path.isdir(out_dir):
-        shutil.rmtree(out_dir)
-        print("Deleted existing folder!")
-        os.makedirs(out_dir, exist_ok=False)
-
-# Load-displacement data on root process
-if rank == 0:
-    lodi_out = open(out_dir+"/lodi.txt", 'w')
-
-# XDMF output
-xdmf_out = XDMFFile (mesh.mpi_comm(), out_dir+"/output.xdmf")
-
-# VTK mesh partition
-File(out_dir+"/meshPartition.pvd").write(
-        MeshFunction("size_t", mesh, mesh.topology().dim(), mesh.mpi_comm().rank))
-
-
-
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 # Begin time-stepping
-# ---------------------------------------------------------------#
+# --------------------------------------------------------------------------------------#
 
 as_backend_type(u.vector()).update_ghost_values()
 as_backend_type(d.vector()).update_ghost_values()
@@ -450,7 +449,8 @@ while True:
         solver_u.solve()
 
         if nl_type == "tao":
-            solver_d.solve(FractureProblem(),d.vector(),dOld.vector(),d_ub.vector())
+            solver_d.solve(FractureProblem(),d.vector(),
+                dOld.vector(),d_ub.vector())
         else:
             solver_d.solve()
 
